@@ -14,6 +14,7 @@ createApp({
   setup() {
     const token = ref(localStorage.getItem("bondcage_token") || "");
     const user = ref(localStorage.getItem("bondcage_user") || "");
+    const role = ref(localStorage.getItem("bondcage_role") || "");
     const username = ref("admin");
     const password = ref("123456");
     const err = ref("");
@@ -36,6 +37,8 @@ createApp({
     const attestations = ref([]);
     const releases = ref([]);
     const forfeits = ref([]);
+    const rollbacks = ref([]);
+    const minutes = ref(null);
     const recon = ref({});
     const partyProof = ref(null);
     const proofParty = ref("P-EAST");
@@ -96,8 +99,10 @@ createApp({
     function logout() {
       token.value = "";
       user.value = "";
+      role.value = "";
       localStorage.removeItem("bondcage_token");
       localStorage.removeItem("bondcage_user");
+      localStorage.removeItem("bondcage_role");
     }
 
     const api = createApi(
@@ -159,8 +164,10 @@ createApp({
       }
       token.value = j.token;
       user.value = j.username;
+      role.value = j.role;
       localStorage.setItem("bondcage_token", j.token);
       localStorage.setItem("bondcage_user", j.username);
+      localStorage.setItem("bondcage_role", j.role);
       await refresh();
     }
 
@@ -195,6 +202,8 @@ createApp({
           lk,
           tj,
           sj,
+          rb,
+          mn,
         ] = await Promise.all([
           api.bonds(),
           api.cages(),
@@ -207,6 +216,8 @@ createApp({
           api.locks(),
           api.topupJobs(),
           api.splitJobs(),
+          api.rollbacks(),
+          api.rollbackMinutes(),
         ]);
         bonds.value = b.items || [];
         cages.value = c.items || [];
@@ -219,6 +230,8 @@ createApp({
         locks.value = lk.items || [];
         topupJobs.value = tj.items || [];
         splitJobs.value = sj.items || [];
+        rollbacks.value = rb.items || [];
+        minutes.value = mn || null;
         if (!attestForm.value.cage_id && frozenCages.value.length) {
           attestForm.value.cage_id = frozenCages.value[0].id;
         }
@@ -342,6 +355,22 @@ createApp({
       }
     }
 
+    async function doRollback(f) {
+      clearFlash();
+      const ok = window.confirm(
+        `确认按甲路径整笔回滚罚没 ${f.forfeit_ref}？\n` +
+          "罚没作废、笼可用归还、账户冻结/余额归还将在同一事务一次落地。"
+      );
+      if (!ok) return;
+      try {
+        const row = await api.rollback({ forfeit_id: f.id });
+        flashOk(`罚没回滚成功 ${row.rollback_ref}`);
+        await refresh();
+      } catch (e) {
+        flashErr(e);
+      }
+    }
+
     async function loadReconcile() {
       clearFlash();
       try {
@@ -393,6 +422,7 @@ createApp({
     return {
       token,
       user,
+      role,
       username,
       password,
       err,
@@ -405,6 +435,8 @@ createApp({
       attestations,
       releases,
       forfeits,
+      rollbacks,
+      minutes,
       recon,
       partyProof,
       proofParty,
@@ -442,6 +474,7 @@ createApp({
       doAttest,
       doRelease,
       doForfeit,
+      doRollback,
       loadReconcile,
       loadProof,
       doTopupStub,
@@ -478,7 +511,8 @@ createApp({
       <div class="dash-chip"><div class="k">笼数</div><div class="v">{{ dash.cages || 0 }}</div></div>
       <div class="dash-chip"><div class="k">冻结可用</div><div class="v">{{ fmt(dash.frozen_available) }}</div></div>
       <div class="dash-chip"><div class="k">已拨付</div><div class="v">{{ fmt(dash.released_total) }}</div></div>
-      <div class="dash-chip"><div class="k">已罚没</div><div class="v">{{ fmt(dash.forfeited_total) }}</div></div>
+      <div class="dash-chip"><div class="k">在册罚没</div><div class="v">{{ fmt(dash.forfeited_total) }}</div></div>
+      <div class="dash-chip"><div class="k">回滚归还（{{ dash.rollback_count || 0 }}笔）</div><div class="v">{{ fmt(dash.rollback_total) }}</div></div>
     </div>
     <nav class="nav">
       <button v-for="(n,i) in nav" :key="n" :class="{active: tab===i}" @click="tab=i">{{ n }}</button>

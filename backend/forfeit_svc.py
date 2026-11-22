@@ -36,8 +36,8 @@ def do_forfeit(body: ForfeitIn, authorization: AuthHeader = None):
             ).fetchone()
             if not cage:
                 raise HTTPException(404, "笼不存在")
-            if cage["status"] != "核验违约":
-                raise HTTPException(409, "仅核验违约的笼可罚没")
+            if cage["status"] not in ("核验违约", "部分罚没"):
+                raise HTTPException(409, "仅核验违约（含回滚后恢复）的笼可罚没")
             att = conn.execute(
                 """SELECT * FROM attestations
                    WHERE cage_id=? AND attest_gen=? AND outcome='违约'
@@ -54,8 +54,14 @@ def do_forfeit(body: ForfeitIn, authorization: AuthHeader = None):
                 raise HTTPException(409, "罚没金额超过笼可用额")
             now = now_iso()
             gen = int(cage["generation"])
-            ref = f"FOR-{cage['cage_code']}-g{gen}"
-            # 同笼同代禁止重复罚没整额撞车
+            # 同笼代多次罚没（含回滚后再罚）凭证号加序号，保证 forfeit_ref 不撞
+            seq_row = conn.execute(
+                "SELECT COUNT(*) c FROM forfeits WHERE cage_id=? AND cage_generation=?",
+                (body.cage_id, gen),
+            ).fetchone()
+            seq = int(seq_row["c"]) + 1
+            ref = f"FOR-{cage['cage_code']}-g{gen}" if seq == 1 else f"FOR-{cage['cage_code']}-g{gen}-n{seq}"
+            # 同笼同代禁止重复罚没整额撞车（作废凭证不占用额）
             existing = conn.execute(
                 """SELECT id FROM forfeits
                    WHERE cage_id=? AND cage_generation=? AND status='已罚没'""",

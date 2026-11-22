@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-DB_PATH = DATA / "app.db"
+# 默认库路径不变；仅当基线库只读（本机沙箱）时允许经环境变量指到同目录另一文件库
+DB_PATH = Path(os.environ.get("BONDCAGE_DB", DATA / "app.db"))
 FIXTURES = ROOT / "fixtures"
 FRONTEND = ROOT / "frontend"
 
@@ -109,6 +111,9 @@ CREATE TABLE IF NOT EXISTS forfeits(
   status TEXT NOT NULL,
   forfeit_ref TEXT NOT NULL,
   created_at TEXT NOT NULL,
+  voided_at TEXT,
+  voided_by TEXT,
+  rollback_ref TEXT,
   FOREIGN KEY(cage_id) REFERENCES cages(id)
 );
 CREATE TABLE IF NOT EXISTS cage_locks(
@@ -159,7 +164,43 @@ CREATE TABLE IF NOT EXISTS deposit_ledger(
   created_at TEXT NOT NULL,
   actor TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS forfeit_rollbacks(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  forfeit_id INTEGER NOT NULL UNIQUE,
+  cage_id INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  rollback_ref TEXT NOT NULL UNIQUE,
+  reason TEXT NOT NULL,
+  business_day TEXT NOT NULL,
+  path_mode TEXT NOT NULL,
+  minutes_digest TEXT NOT NULL,
+  officer TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(forfeit_id) REFERENCES forfeits(id),
+  FOREIGN KEY(cage_id) REFERENCES cages(id)
+);
+CREATE TABLE IF NOT EXISTS rollback_minutes_seal(
+  business_day TEXT PRIMARY KEY,
+  minutes_path TEXT NOT NULL,
+  digest_sha256 TEXT NOT NULL,
+  sealed_at TEXT NOT NULL,
+  sealed_by TEXT NOT NULL
+);
 """
+
+# 老库在线迁移：为既有 forfeits 补回滚状态列（新库由 CREATE TABLE 直接带齐）
+_FORFEIT_ADDED_COLUMNS = {
+    "voided_at": "TEXT",
+    "voided_by": "TEXT",
+    "rollback_ref": "TEXT",
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(forfeits)").fetchall()}
+    for name, decl in _FORFEIT_ADDED_COLUMNS.items():
+        if name not in cols:
+            conn.execute(f"ALTER TABLE forfeits ADD COLUMN {name} {decl}")
 
 
 def write_audit(conn: sqlite3.Connection, actor: str, action: str, target: str, payload: dict) -> None:
@@ -272,6 +313,7 @@ def seed_attest_samples(conn: sqlite3.Connection) -> None:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
         seed_users(conn)
         seed_bonds(conn)
         seed_cages(conn)
@@ -295,12 +337,24 @@ def dashboard_stats(conn: sqlite3.Connection) -> dict:
         "topup_jobs": conn.execute("SELECT COUNT(*) c FROM topup_jobs").fetchone()["c"],
         "split_jobs": conn.execute("SELECT COUNT(*) c FROM split_jobs").fetchone()["c"],
     }
+    rollback_total = 0.0
+    rollback_count = 0
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='forfeit_rollbacks'"
+    ).fetchone():
+        rb = conn.execute(
+            "SELECT COALESCE(SUM(amount),0) s, COUNT(*) c FROM forfeit_rollbacks"
+        ).fetchone()
+        rollback_total = float(rb["s"])
+        rollback_count = rb["c"]
     return {
         "bonds": bonds,
         "cages": cages,
         "frozen_available": frozen,
         "released_total": released,
         "forfeited_total": forfeited,
+        "rollback_total": rollback_total,
+        "rollback_count": rollback_count,
         "stubs": stubs,
         "meta": PRODUCT_META,
     }

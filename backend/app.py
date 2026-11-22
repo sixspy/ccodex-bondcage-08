@@ -16,6 +16,7 @@ from forfeit_svc import router as forfeit_router
 from locks import router as locks_router
 from reconcile_svc import router as reconcile_router
 from release_svc import router as release_router
+from rollback_svc import router as rollback_router
 from split_svc import router as split_router
 from topup_svc import router as topup_router
 
@@ -38,6 +39,7 @@ for r in (
     attest_router,
     release_router,
     forfeit_router,
+    rollback_router,
     reconcile_router,
     locks_router,
     audit_router,

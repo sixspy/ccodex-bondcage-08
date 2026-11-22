@@ -38,6 +38,17 @@
 - 增补同笼扩代 vs 新笼桥接双写
 - 拆笼整笔事务切分 vs 影子子笼后晋升
 
+## 罚没回滚（甲路径，当日锁死）
+
+口径见 `docs/罚没回滚纪要_2026-11-22.md`，**只走甲路径整笔原子提交，乙路径影子单晋升禁用**：
+
+- `POST /api/forfeits/rollback` 同一事务内完成罚没作废、笼可用归还、账户冻结/余额归还、回滚凭证、审计，失败整笔同滚。
+- 纪要 SHA-256 摘要在业务日首次回滚时写入 `rollback_minutes_seal`，封存后改动即回滚偏航（`rollback_yaw` 审计独立留痕，业务拒写）。
+- 两人同回滚一罚没抢 `cage:{id}` 笼锁，后到者仅留 contention 争用痕、409 零改。
+- 五页同源：罚没页/入笼页/账户页/对账页/审计页共用同一库；对账页 `rollback_integrity` 专查「无凭证假作废」假绿。
+- 假绿事故夹具：`python3 -I scripts/seed_false_green.py`（本机文件库造数，库路径默认 `data/app.db`，只读时回退同目录 `data/app-demo.db`）。
+- 测试：`tests/test_forfeit_rollback.py`（罚没回滚无效失败测、双人争用失败测先红后绿，共 7 条）。
+
 ## 启动
 
 ```powershell

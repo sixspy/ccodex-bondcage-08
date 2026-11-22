@@ -24,8 +24,26 @@ def _reconcile_cage(conn, cage) -> dict:
            WHERE cage_id=? AND status='已罚没' AND cage_generation=?""",
         (cage_id, gen),
     ).fetchone()["s"]
+    # 回滚归还：同笼代作废罚没须有同额回滚凭证，缺凭证即假绿
+    voided = conn.execute(
+        """SELECT id, amount, rollback_ref FROM forfeits
+           WHERE cage_id=? AND status='已作废' AND cage_generation=?""",
+        (cage_id, gen),
+    ).fetchall()
+    rollback_rows = conn.execute(
+        """SELECT amount FROM forfeit_rollbacks WHERE cage_id=?""",
+        (cage_id,),
+    ).fetchall()
+    rollback_returned = round(sum(float(r["amount"]) for r in rollback_rows), 6)
+    voided_total = round(sum(float(v["amount"]) for v in voided), 6)
+    missing_voucher = [
+        v["id"] for v in voided if not v["rollback_ref"]
+    ]
+    rollback_integrity = (
+        not missing_voucher and abs(rollback_returned - voided_total) < 1e-6
+    )
     accounted = round(float(available) + float(released) + float(forfeited), 6)
-    ok = abs(accounted - amount) < 1e-6
+    ok = abs(accounted - amount) < 1e-6 and rollback_integrity
     # 账户侧：该当事人冻结额应覆盖所有仍冻结/核验中的笼可用
     party = cage["party_key"]
     acct = conn.execute(
@@ -48,6 +66,10 @@ def _reconcile_cage(conn, cage) -> dict:
         "available": available,
         "released": float(released),
         "forfeited": float(forfeited),
+        "voided_total": voided_total,
+        "rollback_returned": rollback_returned,
+        "rollback_integrity": rollback_integrity,
+        "missing_voucher_forfeit_ids": missing_voucher,
         "accounted": accounted,
         "balanced": ok,
         "gap": round(amount - accounted, 6),

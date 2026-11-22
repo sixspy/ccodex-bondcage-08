@@ -50,6 +50,10 @@ export function createApi(getToken, onUnauthorized) {
     forfeits: () => req("/api/forfeits"),
     forfeit: (data) =>
       req("/api/forfeits", { method: "POST", body: JSON.stringify(data) }),
+    rollback: (data) =>
+      req("/api/forfeits/rollback", { method: "POST", body: JSON.stringify(data) }),
+    rollbacks: () => req("/api/forfeits/rollbacks"),
+    rollbackMinutes: () => req("/api/forfeits/rollback-minutes"),
     reconcile: () => req("/api/reconcile"),
     reconcileOne: (code) => req(`/api/reconcile/${encodeURIComponent(code)}`),
     proof: (party) => req(`/api/proof/${encodeURIComponent(party)}`),

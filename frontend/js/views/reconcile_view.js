@@ -1,7 +1,7 @@
 export const reconcileViewTemplate = `
 <section class="panel">
   <h2>对账互证</h2>
-  <p class="hint">笼口径：可用 + 已拨付 + 已罚没 = 笼总额（同笼代）。当事人口径：账户冻结 = 活笼可用合计。</p>
+  <p class="hint">笼口径：可用 + 已拨付 + 在册罚没 = 笼总额（同笼代）；作废罚没须有同额回滚凭证（回滚完整性），无凭证作废即假绿。当事人口径：账户冻结 = 活笼可用合计。</p>
   <div class="actions">
     <button @click="loadReconcile">刷新对账</button>
     <button class="secondary" @click="loadProof">当事人互证</button>
@@ -22,7 +22,7 @@ export const reconcileViewTemplate = `
     <thead>
       <tr>
         <th>笼</th><th>代</th><th>状态</th><th>总额</th><th>可用</th>
-        <th>拨付</th><th>罚没</th><th>合计</th><th>平衡</th><th>缺口</th>
+        <th>拨付</th><th>在册罚没</th><th>回滚归还</th><th>合计</th><th>平衡</th><th>回滚完整性</th><th>缺口</th>
       </tr>
     </thead>
     <tbody>
@@ -34,9 +34,15 @@ export const reconcileViewTemplate = `
         <td>{{ fmt(i.available) }}</td>
         <td>{{ fmt(i.released) }}</td>
         <td>{{ fmt(i.forfeited) }}</td>
+        <td>{{ fmt(i.rollback_returned || 0) }}</td>
         <td>{{ fmt(i.accounted) }}</td>
         <td>
           <span class="badge" :class="i.balanced?'pass':'fail'">{{ i.balanced ? '是' : '否' }}</span>
+        </td>
+        <td>
+          <span class="badge" :class="i.rollback_integrity?'pass':'fail'">
+            {{ i.rollback_integrity ? '完整' : '假绿' }}
+          </span>
         </td>
         <td>{{ fmt(i.gap) }}</td>
       </tr>

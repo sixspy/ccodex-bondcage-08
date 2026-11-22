@@ -64,6 +64,19 @@ export const cagesViewTemplate = `
         <tr><td>罚没条数</td><td>{{ cageDetail.forfeits.length }}</td></tr>
       </tbody>
     </table>
+    <h4 style="margin-top:10px">罚没条目（册页同源）</h4>
+    <table>
+      <thead><tr><th>凭证</th><th>金额</th><th>状态</th><th>回滚凭证</th></tr></thead>
+      <tbody>
+        <tr v-if="!cageDetail.forfeits.length"><td colspan="4" class="hint">无罚没</td></tr>
+        <tr v-for="f in cageDetail.forfeits" :key="f.id">
+          <td>{{ f.forfeit_ref }}</td>
+          <td>{{ fmt(f.amount) }}</td>
+          <td><span class="badge" :class="f.status === '已作废' ? 'done' : 'fail'">{{ f.status }}</span></td>
+          <td>{{ f.rollback_ref || '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </section>
 `;

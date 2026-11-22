@@ -42,6 +42,13 @@ class ForfeitIn(BaseModel):
     reason: str = "履约违约"
 
 
+class RollbackIn(BaseModel):
+    forfeit_id: int
+    reason: str = "操作员点错合约，罚没回滚"
+    # 甲路径为唯一启用口径；显式传乙路径模式按回滚偏航拒写
+    mode: str = "整笔提交"
+
+
 class TopupIn(BaseModel):
     cage_id: int
     amount: float = Field(gt=0)
